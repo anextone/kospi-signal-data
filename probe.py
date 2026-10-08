@@ -1,4 +1,36 @@
 #!/usr/bin/env python3
+"""수급 데이터 대체 소스 탐색용 (일회성 2차). 다음 금융 투자자 API의 세부 항목·과거 깊이 확인."""
+import urllib.request, json
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+H = {"User-Agent": UA, "Accept": "application/json", "Referer": "https://finance.daum.net/domestic/kospi"}
+B = "https://finance.daum.net/api/investor/KOSPI/days"
+C = [
+ B + "?perPage=3&page=1&detail=true",
+ B + "?perPage=3&page=1&details=true",
+ B + "?perPage=3&page=1&isDetail=true",
+ B + "?perPage=3&page=1&fieldName=details",
+ "https://finance.daum.net/api/investor/KOSPI/days/details?perPage=3&page=1",
+ B + "?perPage=100&page=1",
+ B + "?perPage=100&page=60",
+ B + "?perPage=100&page=200",
+ "https://finance.daum.net/api/investor/days?symbolCode=KOSPI&perPage=3&page=1",
+ "https://finance.daum.net/api/market_index/days?market=KOSPI&perPage=3&page=1",
+ "https://finance.daum.net/api/investor/KOSPI/times?perPage=3&page=1",
+]
+for url in C:
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=H), timeout=20) as r:
+            t = r.read().decode("utf-8", "replace")
+            try:
+                j = json.loads(t)
+                d = j.get("data") or []
+                info = {"n": len(d), "first": d[0] if d else None, "last_date": d[-1].get("date") if d else None, "keys": list(j.keys())}
+                print(f"[{r.status}] {url}\n   {json.dumps(info, ensure_ascii=False)[:900]}\n")
+            except Exception:
+                print(f"[{r.status}] {url}\n   {t[:300]!r}\n")
+    except Exception as e:  # noqa
+        print(f"[ERR] {url}: {e}\n")
+#!/usr/bin/env python3
 """수급 데이터 대체 소스 탐색용 (일회성). 각 후보 주소의 응답 코드와 앞부분만 출력한다."""
 import urllib.request, urllib.parse, ssl, json
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
