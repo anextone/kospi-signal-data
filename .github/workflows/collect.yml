@@ -1,0 +1,43 @@
+name: Collect KOSPI signal data
+
+on:
+  schedule:
+    # 22:20 UTC Sun-Thu = 07:20 KST Mon-Fri (계기판 08:40 실행 전)
+    - cron: "20 22 * * 0-4"
+    # 10:30 UTC Mon-Fri = 19:30 KST (당일 장 마감 후 수급 확정치)
+    - cron: "30 10 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      backfill_start:
+        description: "투자자 수급을 이 날짜(YYYY-MM-DD)까지 과거로 채움. 비우면 최근 분만."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Collect
+        env:
+          BACKFILL_START: ${{ github.event.inputs.backfill_start }}
+        run: python3 collect_official.py
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+          git commit -m "data: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
