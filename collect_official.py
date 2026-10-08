@@ -3,13 +3,14 @@
 
 수집 대상 (모두 공개, 인증키 불필요)
   data/kospi_index.csv   코스피 지수 일별 시가·고가·저가·종가·거래량   네이버 금융 차트(KRX 지수 원값)
-  data/flows.csv         코스피 투자자별 순매수(억원)                    네이버 금융 투자자별 매매동향
+  data/flows.csv         코스피 투자자별 순매수(억원, 연기금 포함)        다음 금융 투자자별 매매동향 API
   data/fred_<ID>.csv     DEXKOUS(원/달러), DCOILBRENTEU(브렌트), DGS10(미 10년물), VIXCLS(VIX)   FRED
   data/lev_etf.csv       삼성전자·SK하이닉스 단일종목 레버리지 ETF 시가총액 합계(억원) 일별 스냅샷   네이버 금융 ETF 목록
   data/status.json       소스별 성공 여부·마지막 날짜·오류
 
 환경변수
   BACKFILL_START=YYYY-MM-DD   투자자 수급을 이 날짜까지 과거로 채움(수동 실행 때만). 비우면 최근 분만 갱신.
+                              (다음 금융은 제공 기간이 제한적이라 그 이전은 채워지지 않음)
 """
 import csv, datetime as dt, io, json, os, re, sys, time, urllib.request
 
@@ -20,12 +21,12 @@ KST = dt.timezone(dt.timedelta(hours=9))
 status = {"run_at": dt.datetime.now(KST).isoformat(timespec="seconds"), "sources": {}}
 
 
-def get(url, enc="utf-8", referer=None, tries=3):
+def get(url, enc="utf-8", referer=None, tries=3, timeout=60):
     last = None
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, **({"Referer": referer} if referer else {})})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.read().decode(enc, "replace")
         except Exception as e:  # noqa
             last = e
@@ -76,64 +77,69 @@ def kospi_index():
     return {"last_date": rows[-1][0], "first_date": rows[0][0], "rows": len(rows)}
 
 
-# ---- 2. 투자자별 순매수 (네이버, 페이지당 10영업일) ------------------------
+# ---- 2. 투자자별 순매수 (다음 금융 API, 원 → 억원) -------------------------
+# 네이버 investorDealTrendDay 페이지는 2026-09 이후 HTTP 410으로 중단되어 다음 금융으로 교체
 FLOW_COLS = ["date", "individual", "foreign", "institution", "fin_invest", "insurance", "trust", "bank",
              "other_fin", "pension", "other_corp"]
-ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
-CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
-TAG_RE = re.compile(r"<[^>]+>")
-DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{2})$")
+DAUM = "https://finance.daum.net/api/investor/KOSPI/days?perPage=100&page={p}&details=true"
 
 
-def flow_page(bizdate):
-    html = get(f"https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate={bizdate}&sosok=01", enc="euc-kr",
-               referer="https://finance.naver.com/sise/sise_deal_rank.naver")
+def eok(v):
+    try:
+        return int(round(float(v) / 1e8))
+    except (TypeError, ValueError):
+        return 0
+
+
+def flow_page(p):
+    js = json.loads(get(DAUM.format(p=p), referer="https://finance.daum.net/domestic/kospi"))
     out = []
-    for tr in ROW_RE.findall(html):
-        cells = [TAG_RE.sub("", c).replace("&nbsp;", " ").strip() for c in CELL_RE.findall(tr)]
-        if len(cells) < len(FLOW_COLS):
-            continue
-        m = DATE_RE.match(cells[0])
-        if not m:
-            continue
-        rec = {"date": f"20{m.group(1)}-{m.group(2)}-{m.group(3)}"}
-        for i, c in enumerate(FLOW_COLS[1:], start=1):
-            try:
-                rec[c] = int(cells[i].replace(",", ""))
-            except ValueError:
-                rec[c] = 0
-        out.append(rec)
-    return out
+    for r in js.get("data") or []:
+        d = (r.get("details") or {})
+        out.append({
+            "date": str(r.get("date", ""))[:10],
+            "individual": eok(r.get("individualStraightPurchasePrice")),
+            "foreign": eok(r.get("foreignStraightPurchasePrice")),
+            "institution": eok(r.get("institutionStraightPurchasePrice")),
+            "fin_invest": eok(d.get("FINANCIAL_INVESTOR")),
+            "insurance": eok(d.get("INSURANCE_COMPANIES")),
+            "trust": eok((d.get("MUTUAL_FUND") or 0) + (d.get("PRIVATE_EQUITY_FUND") or 0)),
+            "bank": eok(d.get("BANK")),
+            "other_fin": eok(d.get("ETC_FINANCIAL_INSTITUTION")),
+            "pension": eok(d.get("PENSION_FUND")),
+            "other_corp": eok(d.get("ETC_CORPORATION")),
+        })
+    return out, js.get("totalPages")
 
 
 def flows():
     path = os.path.join(DATA, "flows.csv")
     have = {r["date"]: r for r in read_csv(path)}
     start = os.environ.get("BACKFILL_START", "").strip()
-    target = start or (max(have) if have else (dt.date.today() - dt.timedelta(days=400)).isoformat())
-    cur = dt.datetime.now(KST).date()
-    pages = 0
-    while pages < 3000:
-        rows = flow_page(cur.strftime("%Y%m%d"))
+    target = start or (max(have) if have else "1990-01-01")
+    pages, total = 0, None
+    p = 1
+    while p <= 200:
+        rows, total = flow_page(p)
         pages += 1
         if not rows:
             break
         for r in rows:
-            have[r["date"]] = r  # 다시 받은 날은 최신 값으로 덮어씀(잠정치 보정)
-        oldest = min(r["date"] for r in rows)
-        if oldest <= target:
+            have[r["date"]] = r  # 다시 받은 날은 최신 값으로 덮어씀(장중 잠정치 보정)
+        if min(r["date"] for r in rows) <= target or (total and p >= total):
             break
-        cur = dt.date.fromisoformat(oldest) - dt.timedelta(days=1)
-        time.sleep(0.4)
+        p += 1
+        time.sleep(0.5)
     rows = [[have[d][c] for c in FLOW_COLS] for d in sorted(have)]
     write_csv(path, FLOW_COLS, rows)
-    return {"last_date": rows[-1][0] if rows else None, "first_date": rows[0][0] if rows else None, "rows": len(rows), "pages": pages}
+    return {"last_date": rows[-1][0] if rows else None, "first_date": rows[0][0] if rows else None, "rows": len(rows),
+            "pages": pages, "total_pages": total, "source": "finance.daum.net"}
 
 
 # ---- 3. FRED ---------------------------------------------------------------
 def fred(sid):
     def run():
-        txt = get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}")
+        txt = get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}", tries=1, timeout=15)  # 러너에서 자주 시간 초과 → 짧게 시도
         rd = list(csv.reader(io.StringIO(txt)))
         hdr, body = rd[0], rd[1:]
         body = [r for r in body if len(r) == 2 and r[1] not in (".", "")]
