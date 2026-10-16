@@ -1,5 +1,5 @@
 {
- "run_at": "2026-10-16T09:25:44+09:00",
+ "run_at": "2026-10-16T23:56:49+09:00",
  "sources": {
   "kospi_index": {
    "ok": true,
@@ -36,7 +36,7 @@
    "ok": true,
    "last_date": "2026-10-16",
    "count": 14,
-   "total_marcap_eok": 34466.0
+   "total_marcap_eok": 35564.0
   }
  }
 }
