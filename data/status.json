@@ -1,17 +1,17 @@
 {
- "run_at": "2026-10-16T23:56:49+09:00",
+ "run_at": "2026-10-19T09:13:14+09:00",
  "sources": {
   "kospi_index": {
    "ok": true,
-   "last_date": "2026-10-16",
-   "first_date": "2014-07-23",
+   "last_date": "2026-10-19",
+   "first_date": "2014-07-24",
    "rows": 3000
   },
   "flows": {
    "ok": true,
-   "last_date": "2026-10-16",
+   "last_date": "2026-10-19",
    "first_date": "2016-05-13",
-   "rows": 2558,
+   "rows": 2559,
    "pages": 1,
    "total_pages": 26,
    "source": "finance.daum.net"
@@ -34,9 +34,9 @@
   },
   "lev_etf": {
    "ok": true,
-   "last_date": "2026-10-16",
+   "last_date": "2026-10-19",
    "count": 14,
-   "total_marcap_eok": 35564.0
+   "total_marcap_eok": 34393.0
   }
  }
 }
