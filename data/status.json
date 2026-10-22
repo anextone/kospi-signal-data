@@ -1,5 +1,5 @@
 {
- "run_at": "2026-10-22T09:42:00+09:00",
+ "run_at": "2026-10-23T00:25:59+09:00",
  "sources": {
   "kospi_index": {
    "ok": true,
@@ -34,9 +34,9 @@
   },
   "lev_etf": {
    "ok": true,
-   "last_date": "2026-10-22",
+   "last_date": "2026-10-23",
    "count": 14,
-   "total_marcap_eok": 37543.0
+   "total_marcap_eok": 34690.0
   }
  }
 }
