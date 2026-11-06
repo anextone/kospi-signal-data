@@ -1,17 +1,17 @@
 {
- "run_at": "2026-11-06T03:09:52+09:00",
+ "run_at": "2026-11-06T11:28:41+09:00",
  "sources": {
   "kospi_index": {
    "ok": true,
-   "last_date": "2026-11-05",
-   "first_date": "2014-08-12",
+   "last_date": "2026-11-06",
+   "first_date": "2014-08-13",
    "rows": 3000
   },
   "flows": {
    "ok": true,
-   "last_date": "2026-11-05",
+   "last_date": "2026-11-06",
    "first_date": "2016-05-13",
-   "rows": 2572,
+   "rows": 2573,
    "pages": 1,
    "total_pages": 26,
    "source": "finance.daum.net"
@@ -36,7 +36,7 @@
    "ok": true,
    "last_date": "2026-11-06",
    "count": 14,
-   "total_marcap_eok": 32081.0
+   "total_marcap_eok": 29283.0
   }
  }
 }
